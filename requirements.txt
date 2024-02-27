@@ -1,0 +1,4 @@
+numpy~=1.26
+polars~=0.20
+pytz~=2024.1
+untangle~=1.2
