@@ -69,9 +69,10 @@ def treat_xml_dir(
 
 
 def treat_xml_file(file: pathlib.Path) -> dict[int, dict[str, pl.DataFrame]]:
-    containers, *event_times = parse_xml(file)
+    containers, exports, *event_times = parse_xml(file)
     dct_instruments = separate_containers(containers)
-    df_instruments = make_dfs(dct_instruments)
+    headers = prettify_headers(exports)
+    df_instruments = make_dfs(dct_instruments, headers)
     experiments = split_dfs(df_instruments, event_times)
     return experiments
 
@@ -79,18 +80,17 @@ def treat_xml_file(file: pathlib.Path) -> dict[int, dict[str, pl.DataFrame]]:
 def parse_xml(file: pathlib.Path) -> tuple[list[untangle.Element]]:
     unt = untangle.parse(str(file))
     containers = unt.phyphox.data_containers.children
+    exports = unt.phyphox.export.children
     start_times, pause_times = unt.phyphox.events.start, unt.phyphox.events.pause
 
-    return containers, start_times, pause_times
+    return containers, exports, start_times, pause_times
 
 
 def separate_containers(
     containers: list[untangle.Element],
 ) -> dict[str, dict[str, np.ndarray]]:
     dct_init = {
-        getattr(_l, "cdata"): np.array(
-            tuple(map(float, _l._attributes["init"].split(",")))
-        )
+        _l.cdata: np.array(tuple(map(float, _l._attributes["init"].split(","))))
         for _l in containers
     }
     dct_sep = {
@@ -105,14 +105,29 @@ def separate_containers(
     return dct_sep
 
 
+def prettify_headers(exports: list[untangle.Element]):
+    return {
+        child._attributes["name"]: {
+            _e.cdata: _e._attributes["name"] for _c in child.children for _e in _c
+        }
+        for child in exports
+    }
+
+
 def parse_csv(*args):
     pass
 
 
 def make_dfs(
-    dct_instruments: dict[str, dict[str, np.ndarray]]
+    dct_instruments: dict[str, dict[str, np.ndarray]],
+    exports: dict[str, dict[str, str]],
 ) -> dict[str, pl.DataFrame]:
-    return {k: pl.from_dict(v) for k, v in dct_instruments.items()}
+    dfs = {k: pl.from_dict(v) for k, v in dct_instruments.items()}
+    for k, df in dfs.items():
+        dfs[k] = df.select(
+            (pl.col(k).alias(v) for k, v in exports[PREFIXES[k]].items())
+        )
+    return dfs
 
 
 def split_dfs(
@@ -126,17 +141,22 @@ def split_dfs(
         start_timestamp = int(times[0]._attributes["systemTime"])
         experiments[start_timestamp] = {}
         for key, df in dct_dfs.items():
-            time_col = f"{key}_time"
+            # time_col = f"{key}_time"
+            time_col = "Time (s)"
             experiments[start_timestamp][key] = (
                 df.filter(
                     (pl.col(time_col) >= start_time) & (pl.col(time_col) < pause_time)
                 )
+                # .with_columns(
+                #     (1e6 * pl.col(time_col).cast(pl.Duration)).alias(time_col)
+                # )
                 .with_columns(
-                    (1e6 * pl.col(time_col).cast(pl.Duration)).alias(time_col)
-                )
-                .with_columns(
-                    pl.col(time_col)
-                    + datetime.datetime.fromtimestamp(start_timestamp / 1000, TIMEZONE)
+                    (
+                        (1e6 * pl.col(time_col)).cast(pl.Duration)
+                        + datetime.datetime.fromtimestamp(
+                            start_timestamp / 1000, TIMEZONE
+                        )
+                    ).alias("local_time")
                 )
             )
     return experiments
