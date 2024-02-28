@@ -119,7 +119,7 @@ def main():
 
     args = parser.parse_args()
 
-    in_root, out_root = args
+    in_root, out_root = args.input_dir, args.output_dir
 
     for path in in_root.iterdir():
         phone_id = path.stem
