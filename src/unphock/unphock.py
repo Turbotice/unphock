@@ -1,5 +1,8 @@
 # /usr/bin/env python3
 
+"""Separate acquisitions into individual data files"""
+
+import argparse
 import datetime
 import pytz
 import pathlib
@@ -8,11 +11,6 @@ import polars as pl
 import untangle
 
 
-root_raw = pathlib.Path(
-    "/run/user/1896521/gvfs/smb-share:server=saguenay.local,share=share_hublot/Data/0226/Telephones/raw"
-)
-root_dest = "/run/user/1896521/gvfs/smb-share:server=saguenay.local,share=share_hublot/Data/0226/Telephones"
-
 TIMEZONE = pytz.timezone("America/Montreal")
 PREFIXES = {
     "acc": "Accelerometer",
@@ -20,29 +18,6 @@ PREFIXES = {
     "loc": "Location",
     "mag": "Magnetometer",
 }
-
-
-test_path = root.joinpath("04/XML/1418.phyphox")
-
-
-def iterate_dirs(in_root: pathlib.Path, out_root: pathlib.Path):
-    for path in in_root.iterdir():
-        phone_id = path.stem
-        if len(phone_id) in (1, 2):
-            try:
-                int(phone_id)
-            except ValueError:
-                continue
-
-        phone_id = f"{int(phone_id):02d}"
-        xml_dir = path.joinpath("XML")
-        if xml_dir.exists():
-            experiments = treat_xml(xml_dir, phone_id)
-            write_dfs(out_root, experiments, phone_id)
-        # meta_dir = path.joinpath("meta")
-        # csv_files = path.glob("*.csv")
-        # if meta_dir.exists():
-        #     parse_csv(meta_dir, csv_files)
 
 
 def treat_xml(xdir: pathlib.Path, phone_id: str) -> dict[int, dict[str, pl.DataFrame]]:
@@ -100,10 +75,24 @@ def split_dfs(
     experiments = {}
     for i, times in enumerate(*event_times):
         experiments[i] = {}
+        start_time, pause_time = [
+            float(_e._attributes["experimenTime"]) for _e in times
+        ]
         for key, df in dct_dfs.items():
             time_col = f"{key}_time"
-            experiments[i][key] = df.filter(
-                (pl.col() >= times[0]) & (pl.col(time_col) < times[1])
+            experiments[i][key] = (
+                df.filter(
+                    (pl.col(time_col) >= start_time) & (pl.col(time_col) < pause_time)
+                )
+                .with_columns(
+                    (1e6 * pl.col(time_col).cast(pl.Duration)).alias(time_col)
+                )
+                .with_columns(
+                    pl.col(time_col)
+                    + datetime.datetime.fromtimestamp(
+                        int(times[0]._attributes["systemTime"]) / 1000, TIMEZONE
+                    )
+                )
             )
     return experiments
 
@@ -118,12 +107,37 @@ def write_dfs(
         phone_path.mkdir()
 
     for exp_id, experiment in experiments.items():
+        directory = phone_path.joinpath(f"T_{exp_id:04d}_{phone_id}_AGML")
+        directory.mkdir(exist_ok=True)
+        print(f"saving df to {directory}")
 
-        directory = phone_path.joinpath(f"T_{exp_id:04d}_{phone_id}_")
-        directory.mkdir
-    pass
+
+def main(args):
+    in_root, out_root = args
+
+    for path in in_root.iterdir():
+        phone_id = path.stem
+        if len(phone_id) in (1, 2):
+            try:
+                int(phone_id)
+            except ValueError:
+                continue
+
+        phone_id = f"{int(phone_id):02d}"
+        xml_dir = path.joinpath("XML")
+        if xml_dir.exists():
+            experiments = treat_xml(xml_dir, phone_id)
+            write_dfs(out_root, experiments, phone_id)
+        # meta_dir = path.joinpath("meta")
+        # csv_files = path.glob("*.csv")
+        # if meta_dir.exists():
+        #     parse_csv(meta_dir, csv_files)
 
 
-_d = datetime.datetime.fromtimestamp(
-    1708979062356 / 1000, pytz.timezone("America/Montreal")
-)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input_dir", type=pathlib.Path)
+    parser.add_argument("output_dir", type=pathlib.Path)
+
+    args = parser.parse_args()
+    main(args)
