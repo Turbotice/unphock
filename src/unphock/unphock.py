@@ -98,7 +98,7 @@ def split_dfs(
 
 
 def write_dfs(
-    out_root: pathlib.path,
+    out_root: pathlib.Path,
     experiments: dict[int, dict[str, pl.DataFrame]],
     phone_id: str,
 ):
@@ -112,7 +112,13 @@ def write_dfs(
         print(f"saving df to {directory}")
 
 
-def main(args):
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input_dir", type=pathlib.Path)
+    parser.add_argument("output_dir", type=pathlib.Path)
+
+    args = parser.parse_args()
+
     in_root, out_root = args
 
     for path in in_root.iterdir():
@@ -135,9 +141,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input_dir", type=pathlib.Path)
-    parser.add_argument("output_dir", type=pathlib.Path)
-
-    args = parser.parse_args()
-    main(args)
+    main()
