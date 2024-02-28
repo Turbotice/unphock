@@ -31,13 +31,13 @@ def iterate(in_root: pathlib.Path, out_root: pathlib.Path, **kwargs):
                 phone_id = f"{int(phone_id):02d}"
             except ValueError:
                 warnings.warn(
-                    "Skipping {phone_id} that does not look like a phone ID",
+                    f"Skipping {phone_id} that does not look like a phone ID",
                     stacklevel=1,
                 )
                 continue
         else:
             warnings.warn(
-                "Skipping {phone_id} that does not look like a phone ID", stacklevel=1
+                f"Skipping {phone_id} that does not look like a phone ID", stacklevel=1
             )
             continue
 
