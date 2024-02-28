@@ -49,7 +49,7 @@ def iterate(in_root: pathlib.Path, out_root: pathlib.Path, **kwargs):
         xml_experiments = treat_xml_dir(xml_dir, phone_id) if xml_dir.exists() else {}
 
         # TODO
-        meta_time_file = path.joinpath("meta").join("time.csv")
+        meta_time_file = path.joinpath("meta").joinpath("time.csv")
         csv_files = path.glob("*.csv")
         csv_files = [file for file in csv_files if file.stem in PREFIXES.values()]
         csv_experiments = (
@@ -86,6 +86,10 @@ def parse_xml(file: pathlib.Path) -> tuple[list[untangle.Element]]:
     containers = unt.phyphox.data_containers.children
     exports = unt.phyphox.export.children
     start_times, pause_times = unt.phyphox.events.start, unt.phyphox.events.pause
+    if len(start_times) == 0:
+        start_times = [start_times]
+    if len(pause_times) == 0:
+        pause_times = [pause_times]
 
     return containers, exports, start_times, pause_times
 
@@ -122,7 +126,9 @@ def parse_xml_time(
     event_times: tuple[list[untangle.Element]],
 ) -> dict[str, list[tuple[float], tuple[int]]]:
     dct = {"START": None, "PAUSE": None}
-    events_flat = (_ee for _e in event_times for _ee in _e)
+    # events_flat = (_ee for _e in event_times for _ee in _e)
+    events_flat = event_times[0] + event_times[1]
+    print(events_flat)
     for k in dct:
         dct[k] = [
             tuple(
@@ -139,7 +145,9 @@ def parse_xml_time(
 
 def treat_csv_files(meta_time_file: pathlib.Path, csv_files: list[pathlib.Path]):
     meta_times = parse_meta_time(meta_time_file)
-    parse_csv(meta_times, csv_files)
+    df_instruments = parse_csv(meta_times, csv_files)
+    experiments = split_dfs(df_instruments, meta_times)
+    return experiments
 
 
 def parse_meta_time(file: pathlib.Path) -> dict[str, list[tuple[float], tuple[int]]]:
@@ -169,6 +177,7 @@ def parse_csv(
     # for file in csv_files:
     #     df = pl.read_csv(file)
     dfs = {file.stem: pl.read_csv(file) for file in csv_files}
+    dfs = {k: v for k, v in dfs.items() if len(v) > 1}
     # INV_PREFIXES = {v: k for k, v in PREFIXES.items()}
     return dfs
 
@@ -187,19 +196,25 @@ def make_dfs(
 
 def split_dfs(
     dct_dfs: dict[str, pl.DataFrame],
-    event_times: dict[str, list[tuple[float], tuple[int]]]
+    event_times: dict[str, list[tuple[float], tuple[int]]],
 ) -> dict[int, dict[str, pl.DataFrame]]:
     experiments = {}
+    print(event_times)
     for v in ((vv for _t in times for vv in _t) for times in event_times.values()):
         # start_time, pause_time = [
         #     float(_e._attributes["experimentTime"]) for _e in times
         # ]
+        # print(v)
+        # for val in v:
+        #     print(val)
         start_time, pause_time, start_timestamp, _ = v
         # start_timestamp = int(times[0]._attributes["systemTime"])
         experiments[start_timestamp] = {}
         for key, df in dct_dfs.items():
             # time_col = f"{key}_time"
             time_col = "Time (s)"
+            # print(start_time, pause_time)
+            # print(df.head(3))
             experiments[start_timestamp][key] = (
                 df.filter(
                     (pl.col(time_col) >= start_time) & (pl.col(time_col) < pause_time)
@@ -234,13 +249,15 @@ def write_dfs(
     for exp_id, experiment in enumerate(experiments.values()):
         directory = phone_path.joinpath(f"T_{exp_id+1:04d}_{phone_id}_AGML")
         directory.mkdir(exist_ok=True)
-        for instrument, df in experiment:
+        for instrument, df in experiment.items():
             if instrument in PREFIXES:
                 name = PREFIXES[instrument]
             elif instrument in PREFIXES.values():
                 name = instrument
             else:
-                warnings.warn(f"Unknown instrument {instrument}, skipping", stacklevel=1)
+                warnings.warn(
+                    f"Unknown instrument {instrument}, skipping", stacklevel=1
+                )
                 continue
 
             file = directory.joinpath(f"{name}.csv")
