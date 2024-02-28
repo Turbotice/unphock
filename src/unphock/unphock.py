@@ -153,8 +153,16 @@ def treat_csv_files(meta_time_file: pathlib.Path, csv_files: list[pathlib.Path])
 def parse_meta_time(file: pathlib.Path) -> dict[str, list[tuple[float], tuple[int]]]:
     events = ("START", "PAUSE")
     df = pl.read_csv(file, dtypes={"system time": str})
-    dct_time = {event: df.filter(pl.col("event") == event).get_column("experiment time").to_list() for event in events}
-    dct_ts = {event: df.filter(pl.col("event") == event).get_column("system time").to_list() for event in events}
+    dct_time = {
+        event: df.filter(pl.col("event") == event)
+        .get_column("experiment time")
+        .to_list()
+        for event in events
+    }
+    dct_ts = {
+        event: df.filter(pl.col("event") == event).get_column("system time").to_list()
+        for event in events
+    }
 
     for k in dct_ts:
         dct_ts[k] = list(
