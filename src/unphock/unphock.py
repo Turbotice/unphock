@@ -59,7 +59,7 @@ def iterate(in_root: pathlib.Path, out_root: pathlib.Path, **kwargs):
         )
 
         experiments = xml_experiments | csv_experiments
-        if len(experiments) > 1:
+        if len(experiments) > 0:
             write_dfs(out_root, experiments, phone_id, **kwargs)
 
 
