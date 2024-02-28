@@ -73,7 +73,7 @@ def split_dfs(
     dct_dfs: dict[str, pl.DataFrame], event_times: tuple[list[untangle.Element]]
 ) -> dict[int, dict[str, pl.DataFrame]]:
     experiments = {}
-    for i, times in enumerate(*event_times):
+    for i, times in enumerate(zip(*event_times)):
         experiments[i] = {}
         start_time, pause_time = [
             float(_e._attributes["experimenTime"]) for _e in times
