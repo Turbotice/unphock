@@ -35,10 +35,10 @@ def iterate(in_root: pathlib.Path, out_root: pathlib.Path):
 
         phone_id = f"{int(phone_id):02d}"
         xml_dir = path.joinpath("XML")
-        if xml_dir.exists():
-            xml_experiments = treat_xml_dir(xml_dir, phone_id)
-            # for experiments in lst_experiments:
-            #     write_dfs(out_root, experiments)
+
+        xml_experiments = treat_xml_dir(xml_dir, phone_id) if xml_dir.exists() else {}
+        # for experiments in lst_experiments:
+        #     write_dfs(out_root, experiments)
 
         meta_dir = path.joinpath("meta")
         csv_files = path.glob("*.csv")
