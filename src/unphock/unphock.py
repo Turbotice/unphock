@@ -127,19 +127,23 @@ def parse_xml_time(
 ) -> dict[str, list[tuple[float], tuple[int]]]:
     dct = {"START": None, "PAUSE": None}
     # events_flat = (_ee for _e in event_times for _ee in _e)
-    # events_flat = event_times[0] + event_times[1]
+    events_flat = event_times[0] + event_times[1]
     # print(events_flat)
+    # print(event_times[0])
+    # print(event_times[1])
     for k in dct:
         dct[k] = {
             "time": [
                 float(_e._attributes["experimentTime"])
-                for _e in filter(lambda e: e._name.upper() == k, event_times[0])
+                for _e in filter(lambda e: e._name.upper() == k, events_flat)
             ],
             "timestamp": [
                 int(_e._attributes["systemTime"])
-                for _e in filter(lambda e: e._name.upper() == k, event_times[1])
+                for _e in filter(lambda e: e._name.upper() == k, events_flat)
             ],
         }
+    # print(dct)
+    # print()
     return dct
 
 
@@ -164,11 +168,12 @@ def parse_meta_time(file: pathlib.Path) -> dict[str, list[tuple[float], tuple[in
         for event in events
     }
 
+    # print(dct_ts)
     for k in dct_ts:
         dct_ts[k] = list(
             map(
                 lambda t: int(t[0]) * 1000 + int(t[1]),
-                map(lambda s: s.split("."), dct_ts[k][1]),
+                map(lambda s: s.split("."), dct_ts[k]),
             )
         )
     return {k: {"time": dct_time[k], "timestamp": dct_ts[k]} for k in events}
@@ -219,7 +224,7 @@ def split_dfs(
     event_times: dict[str, list[tuple[float], tuple[int]]],
 ) -> dict[int, dict[str, pl.DataFrame]]:
     experiments = {}
-    print(event_times)
+    # print(event_times)
     # for v in ((vv for _t in times for vv in _t) for times in event_times.values()):
     for v in zip(
         event_times["START"]["time"],
