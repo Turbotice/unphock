@@ -273,7 +273,7 @@ def write_dfs(
     phone_path = out_root.joinpath(phone_id)
     if not phone_path.exists():
         if kwargs["verbose"]:
-            print("Directory {phone_path} does not exist, creating directory")
+            print(f"Directory {phone_path} does not exist, creating directory")
         phone_path.mkdir()
 
     for exp_id, experiment in enumerate(experiments.values()):
