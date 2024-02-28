@@ -76,7 +76,7 @@ def split_dfs(
     for i, times in enumerate(zip(*event_times)):
         experiments[i] = {}
         start_time, pause_time = [
-            float(_e._attributes["experimenTime"]) for _e in times
+            float(_e._attributes["experimentTime"]) for _e in times
         ]
         for key, df in dct_dfs.items():
             time_col = f"{key}_time"
