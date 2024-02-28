@@ -49,10 +49,11 @@ def iterate(in_root: pathlib.Path, out_root: pathlib.Path, **kwargs):
         xml_experiments = treat_xml_dir(xml_dir, phone_id) if xml_dir.exists() else {}
 
         # TODO
-        meta_dir = path.joinpath("meta")
+        meta_time_file = path.joinpath("meta").join("time.csv")
         csv_files = path.glob("*.csv")
-        if meta_dir.exists():
-            parse_csv(meta_dir, csv_files)
+        csv_files = [file for file in csv_files if file.stem in PREFIXES.values()]
+        if meta_time_file.exists() and len(csv_files) > 1:
+            treat_csv_files(meta_time_file, csv_files)
         csv_experiments = {}
 
         experiments = xml_experiments | csv_experiments
@@ -114,8 +115,56 @@ def prettify_headers(exports: list[untangle.Element]):
     }
 
 
-def parse_csv(*args):
-    pass
+def parse_xml_time(
+    event_times: tuple[list[untangle.Element]],
+) -> dict[str, list[tuple[float], tuple[int]]]:
+    dct = {"START": None, "PAUSE": None}
+    events_flat = (_ee for _e in event_times for _ee in _e)
+    for k in dct:
+        dct[k] = [
+            tuple(
+                float(_e._attributes["experimentTime"])
+                for _e in filter(lambda e: e._name.upper() == k, events_flat)
+            ),
+            tuple(
+                int(_e._attributes["systemTime"])
+                for _e in filter(lambda e: e._name.upper() == k, events_flat)
+            ),
+        ]
+    return dct
+
+
+def treat_csv_files(meta_time_file: pathlib.Path, csv_files: list[pathlib.Path]):
+    meta_times = parse_meta_time(meta_time_file)
+    parse_csv(meta_times, csv_files)
+
+
+def parse_meta_time(file: pathlib.Path) -> dict[str, list[tuple[float], tuple[int]]]:
+    df = pl.read_csv(file, dtypes={"system time": str})
+    dct = {
+        event: df.filter(pl.col("event") == event)
+        .select(pl.col("experiment time"), pl.col("system time"))
+        .to_numpy()
+        .T
+        for event in ("START", "PAUSE")
+    }
+    for k in dct:
+        dct[k][0] = tuple(dct[k][0].astype(float))
+    for k in dct:
+        dct[k][1] = tuple(
+            map(
+                lambda t: int(t[0]) * 1000 + int(t[1]),
+                map(lambda s: s.split("."), dct[k][1]),
+            )
+        )
+    return dct
+
+
+def parse_csv(
+    meta_times: dict[str, list[tuple[float | int]]], csv_files: list[pathlib.Path]
+):
+    for file in csv_files:
+        pl.read_csv(file)
 
 
 def make_dfs(
