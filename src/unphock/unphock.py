@@ -50,9 +50,9 @@ def iterate(in_root: pathlib.Path, out_root: pathlib.Path, **kwargs):
 
         # TODO
         meta_dir = path.joinpath("meta")
-        csv_files = path.glob("*.csv")
-        if meta_dir.exists():
-            parse_csv(meta_dir, csv_files)
+        csv_files = list(path.glob("*.csv"))
+        if meta_dir.exists() and len(csv_files) > 1:
+            treat_csv_files(meta_dir, csv_files)
         csv_experiments = {}
 
         experiments = xml_experiments | csv_experiments
@@ -103,6 +103,12 @@ def separate_containers(
     dct_sep["loc"].pop("locStatus")
     dct_sep["loc"].pop("locSatellites")
     return dct_sep
+
+
+def treat_csv_files(meta_dir: pathlib.Path, csv_files: list[pathlib.Path]):
+
+    for csv_file in csv_files:
+        parse_csv(csv_file)
 
 
 def parse_csv(*args):
