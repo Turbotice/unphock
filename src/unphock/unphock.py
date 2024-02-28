@@ -112,17 +112,18 @@ def make_dfs(
 
 def split_dfs(
     dct_dfs: dict[str, pl.DataFrame], event_times: tuple[list[untangle.Element]]
-) -> dict[datetime.datetime, dict[str, pl.DataFrame]]:
+) -> dict[int, dict[str, pl.DataFrame]]:
     experiments = {}
     for times in zip(*event_times):
         # experiments[i] = {}
         start_time, pause_time = [
             float(_e._attributes["experimentTime"]) for _e in times
         ]
-        experiments[start_time] = {}
+        start_timestamp = int(times[0]._attributes["systemTime"])
+        experiments[start_timestamp] = {}
         for key, df in dct_dfs.items():
             time_col = f"{key}_time"
-            experiments[start_time][key] = (
+            experiments[start_timestamp][key] = (
                 df.filter(
                     (pl.col(time_col) >= start_time) & (pl.col(time_col) < pause_time)
                 )
@@ -131,9 +132,7 @@ def split_dfs(
                 )
                 .with_columns(
                     pl.col(time_col)
-                    + datetime.datetime.fromtimestamp(
-                        int(times[0]._attributes["systemTime"]) / 1000, TIMEZONE
-                    )
+                    + datetime.datetime.fromtimestamp(start_timestamp / 1000, TIMEZONE)
                 )
             )
     return experiments
@@ -141,7 +140,7 @@ def split_dfs(
 
 def write_dfs(
     out_root: pathlib.Path,
-    experiments: dict[datetime.datetime, dict[str, pl.DataFrame]],
+    experiments: dict[int, dict[str, pl.DataFrame]],
     phone_id: str,
 ):
     phone_path = out_root.joinpath(phone_id)
