@@ -254,7 +254,7 @@ def split_dfs(
                             start_timestamp / 1000, TIMEZONE
                         )
                     ).alias("local_time")
-                )
+                ).with_columns(pl.col(time_col) - pl.col(time_col).min())
             )
     return experiments
 
