@@ -127,19 +127,19 @@ def parse_xml_time(
 ) -> dict[str, list[tuple[float], tuple[int]]]:
     dct = {"START": None, "PAUSE": None}
     # events_flat = (_ee for _e in event_times for _ee in _e)
-    events_flat = event_times[0] + event_times[1]
-    print(events_flat)
+    # events_flat = event_times[0] + event_times[1]
+    # print(events_flat)
     for k in dct:
-        dct[k] = [
-            tuple(
+        dct[k] = {
+            "time": [
                 float(_e._attributes["experimentTime"])
-                for _e in filter(lambda e: e._name.upper() == k, events_flat)
-            ),
-            tuple(
+                for _e in filter(lambda e: e._name.upper() == k, event_times[0])
+            ],
+            "timestamp": [
                 int(_e._attributes["systemTime"])
-                for _e in filter(lambda e: e._name.upper() == k, events_flat)
-            ),
-        ]
+                for _e in filter(lambda e: e._name.upper() == k, event_times[1])
+            ],
+        }
     return dct
 
 
@@ -151,24 +151,36 @@ def treat_csv_files(meta_time_file: pathlib.Path, csv_files: list[pathlib.Path])
 
 
 def parse_meta_time(file: pathlib.Path) -> dict[str, list[tuple[float], tuple[int]]]:
+    events = ("START", "PAUSE")
     df = pl.read_csv(file, dtypes={"system time": str})
-    dct = {
-        event: df.filter(pl.col("event") == event)
-        .select(pl.col("experiment time"), pl.col("system time"))
-        .to_numpy()
-        .T
-        for event in ("START", "PAUSE")
-    }
-    for k in dct:
-        dct[k][0] = tuple(dct[k][0].astype(float))
-    for k in dct:
-        dct[k][1] = tuple(
+    dct_time = {event: df.filter(pl.col("event") == event).get_column("experiment time").to_list() for event in events}
+    dct_ts = {event: df.filter(pl.col("event") == event).get_column("system time").to_list() for event in events}
+
+    for k in dct_ts:
+        dct_ts[k] = list(
             map(
                 lambda t: int(t[0]) * 1000 + int(t[1]),
-                map(lambda s: s.split("."), dct[k][1]),
+                map(lambda s: s.split("."), dct_ts[k][1]),
             )
         )
-    return dct
+    return {k: {"time": dct_time[k], "timestamp": dct_ts[k]} for k in events}
+
+    # dct = {
+    #     event: df.filter(pl.col("event") == event)
+    #     .select(pl.col("experiment time"), pl.col("system time"))
+    #     .to_numpy()
+    #     .T
+    # }
+    # for k in dct:
+    #     dct[k][0] = tuple(dct[k][0].astype(float))
+    # for k in dct:
+    #     dct[k][1] = tuple(
+    #         map(
+    #             lambda t: int(t[0]) * 1000 + int(t[1]),
+    #             map(lambda s: s.split("."), dct[k][1]),
+    #         )
+    #     )
+    # return dct
 
 
 def parse_csv(
@@ -200,14 +212,19 @@ def split_dfs(
 ) -> dict[int, dict[str, pl.DataFrame]]:
     experiments = {}
     print(event_times)
-    for v in ((vv for _t in times for vv in _t) for times in event_times.values()):
+    # for v in ((vv for _t in times for vv in _t) for times in event_times.values()):
+    for v in zip(
+        event_times["START"]["time"],
+        event_times["PAUSE"]["time"],
+        event_times["START"]["timestamp"],
+    ):
         # start_time, pause_time = [
         #     float(_e._attributes["experimentTime"]) for _e in times
         # ]
         # print(v)
         # for val in v:
         #     print(val)
-        start_time, pause_time, start_timestamp, _ = v
+        start_time, pause_time, start_timestamp = v
         # start_timestamp = int(times[0]._attributes["systemTime"])
         experiments[start_timestamp] = {}
         for key, df in dct_dfs.items():
