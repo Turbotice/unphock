@@ -4,6 +4,8 @@
 
 import argparse
 import datetime
+import functools
+import operator
 import pytz
 import pathlib
 import numpy as np
@@ -20,14 +22,53 @@ PREFIXES = {
 }
 
 
-def treat_xml(xdir: pathlib.Path, phone_id: str) -> dict[int, dict[str, pl.DataFrame]]:
-    for file in xdir.glob("*phyphox"):
-        containers, *event_times = parse_xml(file)
+def iterate(in_root: pathlib.Path, out_root: pathlib.Path):
+    for path in in_root.iterdir():
+        phone_id = path.stem
+        if len(phone_id) in (1, 2):
+            try:
+                int(phone_id)
+            except ValueError:
+                continue
+        else:
+            continue
 
-        dct_instruments = separate_containers(containers)
-        df_instruments = make_dfs(dct_instruments)
-        experiments = split_dfs(df_instruments, event_times)
-        return experiments
+        phone_id = f"{int(phone_id):02d}"
+        xml_dir = path.joinpath("XML")
+        if xml_dir.exists():
+            xml_experiments = treat_xml_dir(xml_dir, phone_id)
+            # for experiments in lst_experiments:
+            #     write_dfs(out_root, experiments)
+
+        meta_dir = path.joinpath("meta")
+        csv_files = path.glob("*.csv")
+        if meta_dir.exists():
+            parse_csv(meta_dir, csv_files)
+        csv_experiments = {}
+        write_dfs(out_root, xml_experiments | csv_experiments, phone_id)
+
+
+def treat_xml_dir(
+    xdir: pathlib.Path, phone_id: str
+) -> dict[int, dict[str, pl.DataFrame]]:
+    return functools.reduce(
+        operator.ior, (treat_xml_file(file) for file in xdir.glob("*phyphox")), {}
+    )
+    # containers, *event_times = parse_xml(file)
+
+    # dct_instruments = separate_containers(containers)
+    # df_instruments = make_dfs(dct_instruments)
+    # experiments = split_dfs(df_instruments, event_times)
+
+    # write_dfs(out_root, experiments, phone_id)
+
+
+def treat_xml_file(file: pathlib.Path) -> dict[int, dict[str, pl.DataFrame]]:
+    containers, *event_times = parse_xml(file)
+    dct_instruments = separate_containers(containers)
+    df_instruments = make_dfs(dct_instruments)
+    experiments = split_dfs(df_instruments, event_times)
+    return experiments
 
 
 def parse_xml(file: pathlib.Path) -> tuple[list[untangle.Element]]:
@@ -59,7 +100,7 @@ def separate_containers(
     return dct_sep
 
 
-def parse_csv():
+def parse_csv(*args):
     pass
 
 
@@ -71,16 +112,17 @@ def make_dfs(
 
 def split_dfs(
     dct_dfs: dict[str, pl.DataFrame], event_times: tuple[list[untangle.Element]]
-) -> dict[int, dict[str, pl.DataFrame]]:
+) -> dict[datetime.datetime, dict[str, pl.DataFrame]]:
     experiments = {}
-    for i, times in enumerate(zip(*event_times)):
-        experiments[i] = {}
+    for times in zip(*event_times):
+        # experiments[i] = {}
         start_time, pause_time = [
             float(_e._attributes["experimentTime"]) for _e in times
         ]
+        experiments[start_time] = {}
         for key, df in dct_dfs.items():
             time_col = f"{key}_time"
-            experiments[i][key] = (
+            experiments[start_time][key] = (
                 df.filter(
                     (pl.col(time_col) >= start_time) & (pl.col(time_col) < pause_time)
                 )
@@ -99,15 +141,15 @@ def split_dfs(
 
 def write_dfs(
     out_root: pathlib.Path,
-    experiments: dict[int, dict[str, pl.DataFrame]],
+    experiments: dict[datetime.datetime, dict[str, pl.DataFrame]],
     phone_id: str,
 ):
     phone_path = out_root.joinpath(phone_id)
     if not phone_path.exists():
         phone_path.mkdir()
 
-    for exp_id, experiment in experiments.items():
-        directory = phone_path.joinpath(f"T_{exp_id:04d}_{phone_id}_AGML")
+    for exp_id, experiment in enumerate(experiments.values()):
+        directory = phone_path.joinpath(f"T_{exp_id+1:04d}_{phone_id}_AGML")
         directory.mkdir(exist_ok=True)
         print(f"saving df to {directory}")
 
@@ -119,25 +161,7 @@ def main():
 
     args = parser.parse_args()
 
-    in_root, out_root = args.input_dir, args.output_dir
-
-    for path in in_root.iterdir():
-        phone_id = path.stem
-        if len(phone_id) in (1, 2):
-            try:
-                int(phone_id)
-            except ValueError:
-                continue
-
-        phone_id = f"{int(phone_id):02d}"
-        xml_dir = path.joinpath("XML")
-        if xml_dir.exists():
-            experiments = treat_xml(xml_dir, phone_id)
-            write_dfs(out_root, experiments, phone_id)
-        # meta_dir = path.joinpath("meta")
-        # csv_files = path.glob("*.csv")
-        # if meta_dir.exists():
-        #     parse_csv(meta_dir, csv_files)
+    iterate(args.input_dir, args.output_dir)
 
 
 if __name__ == "__main__":
