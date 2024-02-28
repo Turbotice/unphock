@@ -11,6 +11,7 @@ import pathlib
 import numpy as np
 import polars as pl
 import untangle
+import warnings
 
 
 TIMEZONE = pytz.timezone("America/Montreal")
@@ -22,30 +23,30 @@ PREFIXES = {
 }
 
 
-def iterate(in_root: pathlib.Path, out_root: pathlib.Path):
+def iterate(in_root: pathlib.Path, out_root: pathlib.Path, **kwargs):
     for path in in_root.iterdir():
         phone_id = path.stem
         if len(phone_id) in (1, 2):
             try:
-                int(phone_id)
+                phone_id = f"{int(phone_id):02d}"
             except ValueError:
+                warnings.warn(
+                    "Skipping {phone_id} that does not look like a phone ID", 1
+                )
                 continue
         else:
+            warnings.warn("Skipping {phone_id} that does not look like a phone ID", 1)
             continue
 
-        phone_id = f"{int(phone_id):02d}"
         xml_dir = path.joinpath("XML")
-
         xml_experiments = treat_xml_dir(xml_dir, phone_id) if xml_dir.exists() else {}
-        # for experiments in lst_experiments:
-        #     write_dfs(out_root, experiments)
 
         meta_dir = path.joinpath("meta")
         csv_files = path.glob("*.csv")
         if meta_dir.exists():
             parse_csv(meta_dir, csv_files)
         csv_experiments = {}
-        write_dfs(out_root, xml_experiments | csv_experiments, phone_id)
+        write_dfs(out_root, xml_experiments | csv_experiments, phone_id, **kwargs)
 
 
 def treat_xml_dir(
@@ -142,25 +143,44 @@ def write_dfs(
     out_root: pathlib.Path,
     experiments: dict[int, dict[str, pl.DataFrame]],
     phone_id: str,
+    **kwargs,
 ):
     phone_path = out_root.joinpath(phone_id)
     if not phone_path.exists():
+        if kwargs["verbose"]:
+            print("Directory {phone_path} does not exist, creating directory")
         phone_path.mkdir()
 
     for exp_id, experiment in enumerate(experiments.values()):
         directory = phone_path.joinpath(f"T_{exp_id+1:04d}_{phone_id}_AGML")
         directory.mkdir(exist_ok=True)
-        print(f"saving df to {directory}")
+        for k, v in PREFIXES.items():
+            file = directory.joinpath(f"{v}.csv")
+            if kwargs["verbose"]:
+                print(f"Saving {k} data to {file}")
+            if not kwargs["dry_run"]:
+                experiment[k].write_csv(file)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input_dir", type=pathlib.Path)
     parser.add_argument("output_dir", type=pathlib.Path)
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="TODO",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="TODO",
+    )
 
     args = parser.parse_args()
+    kwargs = {k: getattr(args, k) for k in ("dry_run", "verbose")}
 
-    iterate(args.input_dir, args.output_dir)
+    iterate(args.input_dir, args.output_dir, **kwargs)
 
 
 if __name__ == "__main__":
