@@ -41,15 +41,23 @@ def iterate(in_root: pathlib.Path, out_root: pathlib.Path, **kwargs):
             )
             continue
 
+        if kwargs["verbose"]:
+            print("---")
+            print(f"Treating phone {phone_id}")
+
         xml_dir = path.joinpath("XML")
         xml_experiments = treat_xml_dir(xml_dir, phone_id) if xml_dir.exists() else {}
 
+        # TODO
         meta_dir = path.joinpath("meta")
         csv_files = path.glob("*.csv")
         if meta_dir.exists():
             parse_csv(meta_dir, csv_files)
         csv_experiments = {}
-        write_dfs(out_root, xml_experiments | csv_experiments, phone_id, **kwargs)
+
+        experiments = xml_experiments | csv_experiments
+        if len(experiments) > 1:
+            write_dfs(out_root, experiments, phone_id, **kwargs)
 
 
 def treat_xml_dir(
@@ -58,13 +66,6 @@ def treat_xml_dir(
     return functools.reduce(
         operator.ior, (treat_xml_file(file) for file in xdir.glob("*phyphox")), {}
     )
-    # containers, *event_times = parse_xml(file)
-
-    # dct_instruments = separate_containers(containers)
-    # df_instruments = make_dfs(dct_instruments)
-    # experiments = split_dfs(df_instruments, event_times)
-
-    # write_dfs(out_root, experiments, phone_id)
 
 
 def treat_xml_file(file: pathlib.Path) -> dict[int, dict[str, pl.DataFrame]]:
@@ -119,7 +120,6 @@ def split_dfs(
 ) -> dict[int, dict[str, pl.DataFrame]]:
     experiments = {}
     for times in zip(*event_times):
-        # experiments[i] = {}
         start_time, pause_time = [
             float(_e._attributes["experimentTime"]) for _e in times
         ]
