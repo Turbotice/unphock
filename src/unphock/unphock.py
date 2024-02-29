@@ -252,14 +252,15 @@ def split_dfs(
                 # .with_columns(
                 #     (1e6 * pl.col(time_col).cast(pl.Duration)).alias(time_col)
                 # )
-                .with_columns(
-                    (
-                        (1e6 * pl.col(time_col)).cast(pl.Duration)
-                        + datetime.datetime.fromtimestamp(
-                            start_timestamp / 1000, TIMEZONE
-                        )
-                    ).alias("local_time")
-                ).with_columns(pl.col(time_col) - pl.col(time_col).min())
+                # .with_columns(
+                #     (
+                #         (1e6 * pl.col(time_col)).cast(pl.Duration)
+                #         + datetime.datetime.fromtimestamp(
+                #             start_timestamp / 1000, TIMEZONE
+                #         )
+                #     ).alias("local_time")
+                # )
+                .with_columns(pl.col(time_col) - start_time)
             )
     return experiments
 
@@ -276,9 +277,17 @@ def write_dfs(
             print(f"Directory {phone_path} does not exist, creating directory")
         phone_path.mkdir()
 
-    for exp_id, experiment in enumerate(experiments.values()):
+    for exp_id, (timestamp, experiment) in enumerate(experiments.items()):
         directory = phone_path.joinpath(f"T_{exp_id+1:04d}_{phone_id}_AGML")
         directory.mkdir(exist_ok=True)
+        meta_dir = directory.joinpath("meta")
+        meta_dir.mkdir(exist_ok=True)
+        time_file = meta_dir.joinpath("time")
+        if kwargs["verbose"]:
+            print(f"Writing timestamp to {time_file}")
+        if not kwargs["dry_run"]:
+            pl.from_dict({"system time": [timestamp]}).write_csv(time_file)
+
         for instrument, df in experiment.items():
             if instrument in PREFIXES:
                 name = PREFIXES[instrument]
